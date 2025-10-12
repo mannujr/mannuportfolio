@@ -1,23 +1,29 @@
 {
-  "name": "front-back-practice",
+  "name": "app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "dev": "concurrently -n NEXT,SERVER -c \"blue,green\" \"npm run start:next\" \"npm run start:server\"",
+    "start:next": "next dev",
+  "start:server": "nodemon ./backend/server.js",
+    "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint ."
   },
   "dependencies": {
+    "next": "15.5.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.5.4"
+    "express": "^5.1.0",
+    "cors": "^2.8.5"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
+    "concurrently": "^9.2.1",
+    "nodemon": "^3.1.10",
     "eslint": "^9",
+    "@eslint/eslintrc": "^3",
     "eslint-config-next": "15.5.4",
-    "@eslint/eslintrc": "^3"
+    "tailwindcss": "^4",
+    "@tailwindcss/postcss": "^4"
   }
 }

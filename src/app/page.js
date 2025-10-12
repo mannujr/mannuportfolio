@@ -1,21 +1,23 @@
-'use client'
-import Image from "next/image";
+"use client";
 import { useEffect, useState } from "react";
 
 export default function Home() {
   const [items, setItems] = useState({ foods: [], furniture: [] });
 
   useEffect(() => {
-    const fetchItems = () => {
-      fetch("http://localhost:3001/items")
-        .then((res) => res.json())
-        .then((data) => setItems(data))
-        .catch((err) => console.error("Error fetchsinng items:", err));
+    const fetchItems = async () => {
+      try {
+        const res = await fetch("http://localhost:3001/items");
+        if (!res.ok) throw new Error("Network response not ok");
+        const data = await res.json();
+        setItems(data);
+      } catch (err) {
+        console.error("Error fetching items:", err);
+      }
     };
 
     fetchItems(); // initial fetch
-
-    const interval = setInterval(fetchItems, 100); 
+    const interval = setInterval(fetchItems, 1000); // fetch every 1s
 
     return () => clearInterval(interval); // cleanup on unmount
   }, []);
