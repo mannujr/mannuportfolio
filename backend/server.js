@@ -7,8 +7,8 @@ app.use(cors());
 
 app.get('/items', (req, res) => {
   res.json({
-    foods: ["tomatoes", "apples", "basnana"],
-    furniture: ["chairs", "tassables", "fans", "sofas"]
+    foods: ["tomatoes", "apples", "banana"],
+    furniture: ["chairs", "tables", "fans", "sofas"]
   });
 });
 
