@@ -1,26 +1,49 @@
-'use client';
+"use client";
 
 import Link from 'next/link';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
-// --- Dummy Data (Same as before) ---
-const products = [
-    { id: 1, name: 'Talisman Necklace', type: 'Necklace', metal: 'Gold', price: 1200, imageUrl: 'https://i.imgur.com/8Q2W8gA.png' },
-    { id: 2, name: 'Aura Ring', type: 'Ring', metal: 'Gold', price: 950, imageUrl: 'https://i.imgur.com/rS7KxN9.png' },
-    { id: 3, name: 'Braided Bracelet', type: 'Bracelet', metal: 'Silver', price: 450, imageUrl: 'https://i.imgur.com/5X8XvNq.png' },
-    { id: 4, name: 'Angel Wing Necklace', type: 'Necklace', metal: 'Gold', price: 1800, imageUrl: 'https://i.imgur.com/vHqLhM7.png' },
-    { id: 5, name: 'Celestial Ring', type: 'Ring', metal: 'Silver', price: 890, imageUrl: '/images/product-5.png' },
+import { useNotification } from '@/context/NotificationContext';
+import { useCart } from '@/context/CartContext';
+
+const productsInitial = [];
+
+const PRICE_RANGES = [
+  { max: 500, label: 'Under $500' },
+  { max: 1000, label: 'Under $1,000' },
+  { max: 2000, label: 'Under $2,000' },
+  { max: 5000, label: 'Under $5,000' },
+  { max: Infinity, label: 'All Prices' }
 ];
+
+// Loading component
+const Loading = () => (
+  <div className="flex items-center justify-center min-h-screen">
+    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
+  </div>
+);
+
+// Error component
+const Error = ({ message }) => (
+  <div className="flex items-center justify-center min-h-screen">
+    <div className="text-red-500 text-center">
+      <h2 className="text-xl font-bold">Error</h2>
+      <p>{message}</p>
+    </div>
+  </div>
+);
 
 // ProductCard Component (Same)
 const ProductCard = ({ product }) => (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden transition-shadow duration-300 hover:shadow-xl">
         <div className="h-64 bg-gray-100 flex items-center justify-center">
-            <img 
-                src={product.imageUrl} 
+            <Link href={`/products/${product.slug}`} className="w-full h-full block">
+              <img 
+                src={product.imageUrl || '/images/placeholder.png'} 
                 alt={product.name} 
                 className="object-cover w-full h-full"
-            />
+              />
+            </Link>
         </div>
         <div className="p-4 text-center">
             <h3 className="text-lg font-semibold text-gray-800">{product.name}</h3>
@@ -32,7 +55,7 @@ const ProductCard = ({ product }) => (
 
 
 // --- Desktop/iPad Filter Content (Used by the Sidebar) ---
-const FilterContent = ({ selectedType, setSelectedType, selectedMetal, setSelectedMetal, priceRange, setPriceRange, handleClearFilters }) => (
+const FilterContent = ({ typeOptions, metalOptions, countsByType, countsByMetal, maxPrice, selectedType, setSelectedType, selectedMetal, setSelectedMetal, priceRange, setPriceRange, handleClearFilters }) => (
     <div className="p-6 pt-0">
         <h2 className="text-2xl font-serif font-bold text-gray-900 mb-8">
             Our Collection
@@ -40,22 +63,22 @@ const FilterContent = ({ selectedType, setSelectedType, selectedMetal, setSelect
         {/* Type Filter */}
         <div className="mb-8">
             <h3 className="text-lg font-bold text-gray-800 mb-3">Type</h3>
-            {['Necklace', 'Ring', 'Bracelet'].map(type => (
+            {(typeOptions || ['Necklace', 'Ring', 'Bracelet']).map(type => (
             <p 
                 key={type} 
                 onClick={() => setSelectedType(type)}
                 className={`text-base py-1 cursor-pointer transition-colors duration-200 
                             ${selectedType === type ? 'font-bold text-black' : 'text-gray-600 hover:text-gray-900'}`}
             >
-                {type}
+                {type}{countsByType && countsByType[type] ? ` (${countsByType[type]})` : ''}
             </p>
             ))}
         </div>
         {/* Metal Filter */}
         <div className="mb-8">
             <h3 className="text-lg font-bold text-gray-800 mb-3">Metal</h3>
-            <div className="flex space-x-4">
-            {['Gold', 'Silver'].map(metal => (
+            <div className="flex flex-wrap gap-2">
+            {(metalOptions || ['Gold', 'Silver']).map(metal => (
                 <span 
                 key={metal}
                 onClick={() => setSelectedMetal(metal)}
@@ -64,7 +87,7 @@ const FilterContent = ({ selectedType, setSelectedType, selectedMetal, setSelect
                                 ? 'bg-amber-700 text-white border-amber-700 shadow-md' 
                                 : 'bg-white text-gray-700 border-gray-300 hover:border-gray-500'}`}
                 >
-                {metal}
+                {metal}{countsByMetal && countsByMetal[metal] ? ` (${countsByMetal[metal]})` : ''}
                 </span>
             ))}
             </div>
@@ -74,8 +97,8 @@ const FilterContent = ({ selectedType, setSelectedType, selectedMetal, setSelect
             <h3 className="text-lg font-bold text-gray-800 mb-3">Price Range</h3>
             <input 
             type="range"
-            min="100"
-            max="2000"
+            min="0"
+            max={maxPrice || 10000000}
             value={priceRange}
             onChange={(e) => setPriceRange(e.target.value)}
             className="w-full h-2 bg-yellow-200 rounded-lg appearance-none cursor-pointer range-lg"
@@ -99,9 +122,9 @@ const FilterContent = ({ selectedType, setSelectedType, selectedMetal, setSelect
 );
 
 // --- NEW: Mobile Filter Chips Component (The horizontal lines) ---
-const MobileFilterChips = ({ selectedType, setSelectedType, selectedMetal, setSelectedMetal, priceRange, setPriceRange }) => {
-    const typeOptions = ['Necklace', 'Ring', 'Bracelet'];
-    const metalOptions = ['Gold', 'Silver'];
+const MobileFilterChips = ({ typeOptions, metalOptions, maxPrice, selectedType, setSelectedType, selectedMetal, setSelectedMetal, priceRange, setPriceRange }) => {
+    const _typeOptions = typeOptions || ['Necklace', 'Ring', 'Bracelet'];
+    const _metalOptions = metalOptions || ['Gold', 'Silver'];
     
     return (
         <div className="flex flex-col space-y-3 pb-1">
@@ -109,7 +132,7 @@ const MobileFilterChips = ({ selectedType, setSelectedType, selectedMetal, setSe
             {/* 1. Type Chips */}
             <div className="overflow-x-auto whitespace-nowrap py-1">
                 <span className="text-xs font-semibold text-gray-500 mr-2">Type:</span>
-                {typeOptions.map(type => (
+                {_typeOptions.map(type => (
                     <span 
                         key={type}
                         onClick={() => setSelectedType(type === selectedType ? null : type)} // Toggle
@@ -126,7 +149,7 @@ const MobileFilterChips = ({ selectedType, setSelectedType, selectedMetal, setSe
             {/* 2. Metal Chips */}
             <div className="overflow-x-auto whitespace-nowrap py-1">
                 <span className="text-xs font-semibold text-gray-500 mr-2">Metal:</span>
-                {metalOptions.map(metal => (
+                {_metalOptions.map(metal => (
                     <span 
                         key={metal}
                         onClick={() => setSelectedMetal(metal === selectedMetal ? null : metal)} // Toggle
@@ -144,17 +167,17 @@ const MobileFilterChips = ({ selectedType, setSelectedType, selectedMetal, setSe
             <div className="py-2">
                 <h3 className="text-xs font-semibold text-gray-500 mb-2">Price: Up to <span className="font-bold text-gray-800">${priceRange}</span></h3>
                 <input 
-                    type="range"
-                    min="100"
-                    max="2000"
-                    value={priceRange}
-                    onChange={(e) => setPriceRange(e.target.value)}
-                    className="w-full h-2 bg-yellow-200 rounded-lg appearance-none cursor-pointer range-lg"
-                    style={{
-                        '--tw-ring-color': '#b45309',
-                        '--tw-ring-opacity': '1',
-                        '--tw-ring-width': '2px'
-                    }}
+                  type="range"
+                  min="0"
+                  max={maxPrice || 10000000}
+                  value={priceRange}
+                  onChange={(e) => setPriceRange(e.target.value)}
+                  className="w-full h-2 bg-yellow-200 rounded-lg appearance-none cursor-pointer range-lg"
+                  style={{
+                      '--tw-ring-color': '#b45309',
+                      '--tw-ring-opacity': '1',
+                      '--tw-ring-width': '2px'
+                  }}
                 />
             </div>
         </div>
@@ -166,13 +189,77 @@ const MobileFilterChips = ({ selectedType, setSelectedType, selectedMetal, setSe
 export default function ProductPage() {
     const [selectedType, setSelectedType] = useState(null);
     const [selectedMetal, setSelectedMetal] = useState(null);
-    const [priceRange, setPriceRange] = useState(2000); 
+    const [priceRange, setPriceRange] = useState(10000000); 
     const [isFilterOpen, setIsFilterOpen] = useState(false); 
+        const [products, setProducts] = useState(productsInitial);
+        const [filterOptions, setFilterOptions] = useState({ types: null, metals: null, countsByType: null, countsByMetal: null });
+
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState(null);
+
+        useEffect(() => {
+            let mounted = true;
+            const fetchProducts = async () => {
+                try {
+                    const res = await fetch('/api/products', { cache: 'no-store' });
+                    if (!res.ok) {
+                        throw new Error(`Error ${res.status}: ${await res.text()}`);
+                    }
+                    const data = await res.json();
+                    if (mounted) {
+                        setProducts(data.products || []);
+                        if (data.filters) {
+                          setFilterOptions({ 
+                            types: data.filters.types || null, 
+                            metals: data.filters.metals || null,
+                            countsByType: data.filters.countsByType || null,
+                            countsByMetal: data.filters.countsByMetal || null
+                          });
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to fetch products:', e);
+                    if (mounted) {
+                        setError(e.message);
+                    }
+                } finally {
+                    if (mounted) {
+                        setLoading(false);
+                    }
+                }
+            };
+            
+            fetchProducts();
+            return () => {
+                mounted = false;
+            };
+        },[]);
+
+        // Poll for updates every 20s to auto-refresh when admin adds new products
+        useEffect(() => {
+          const interval = setInterval(async () => {
+            try {
+              const res = await fetch('/api/products', { cache: 'no-store' });
+              if (!res.ok) return;
+              const data = await res.json();
+              setProducts(data.products || []);
+              if (data.filters) {
+                setFilterOptions({ 
+                  types: data.filters.types || null,
+                  metals: data.filters.metals || null,
+                  countsByType: data.filters.countsByType || null,
+                  countsByMetal: data.filters.countsByMetal || null
+                });
+              }
+            } catch {}
+          }, 20000);
+          return () => clearInterval(interval);
+        }, []);
 
     const handleClearFilters = () => { 
         setSelectedType(null); 
         setSelectedMetal(null); 
-        setPriceRange(2000); 
+        setPriceRange(10000000); 
     };
 
     const filteredProducts = useMemo(() => {
@@ -182,7 +269,7 @@ export default function ProductPage() {
             const priceMatch = product.price <= priceRange;
             return typeMatch && metalMatch && priceMatch;
         });
-    }, [selectedType, selectedMetal, priceRange]);
+    }, [products, selectedType, selectedMetal, priceRange]);
 
 
     return (
@@ -213,6 +300,9 @@ export default function ProductPage() {
                     {/* --- Mobile Chips Container (Conditional Display) --- */}
                     {isFilterOpen && (
                         <MobileFilterChips 
+                            typeOptions={filterOptions.types}
+                            metalOptions={filterOptions.metals}
+                            maxPrice={10000000}
                             selectedType={selectedType} setSelectedType={setSelectedType}
                             selectedMetal={selectedMetal} setSelectedMetal={setSelectedMetal}
                             priceRange={priceRange} setPriceRange={setPriceRange}
@@ -227,6 +317,11 @@ export default function ProductPage() {
                     <aside className="w-1/4 pr-12 hidden lg:block">
                         <div className="sticky top-20"> 
                             <FilterContent 
+                                typeOptions={filterOptions.types}
+                                metalOptions={filterOptions.metals}
+                                countsByType={filterOptions.countsByType}
+                                countsByMetal={filterOptions.countsByMetal}
+                                maxPrice={10000000}
                                 selectedType={selectedType} setSelectedType={setSelectedType}
                                 selectedMetal={selectedMetal} setSelectedMetal={setSelectedMetal}
                                 priceRange={priceRange} setPriceRange={setPriceRange}
@@ -239,7 +334,7 @@ export default function ProductPage() {
                     <main className="w-full lg:w-3/4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-8">
                             {filteredProducts.map((product) => (
-                            <ProductCard key={product.id} product={product} />
+                            <ProductCard key={product._id || product.slug} product={product} />
                             ))}
                             {filteredProducts.length === 0 && (
                             <p className="col-span-full text-center py-10 text-xl text-gray-500">
